@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reddit Profile to Excel</title>
+<meta name="description" content="Type a Reddit username and download a formatted Excel report of the profile's activity.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ------------------------------------------------------------------
+     SETTINGS — paste your Apps Script Web App URL in the <script> below
+     ------------------------------------------------------------------ */
+  :root {
+    --paper: #F4F6F8;
+    --grid: #E3E8EE;
+    --ink: #1C2733;
+    --muted: #5E6B78;
+    --navy: #1F3864;
+    --navy-soft: #E8EDF6;
+    --excel: #1D6F42;
+    --excel-hover: #175A35;
+    --cell: #FFFFFF;
+    --line: #D3DAE2;
+    --error: #B42318;
+    --font: "Schibsted Grotesk", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100%;
+    font-family: var(--font);
+    color: var(--ink);
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: clamp(40px, 10vh, 96px) 20px 48px;
+  }
+  h1 {
+    font-size: clamp(30px, 6vw, 44px);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+    margin: 0 0 14px;
+    max-width: 15ch;
+  }
+  .lede {
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--muted);
+    margin: 0 0 36px;
+    max-width: 52ch;
+  }
+
+  /* ---------------- The spreadsheet ---------------- */
+  .sheet {
+    background: var(--cell);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 1px 0 rgba(28,39,51,.04), 0 12px 32px -18px rgba(31,56,100,.35);
+    overflow: hidden;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) 72px 72px;
+    font-size: 13px;
+  }
+  .hd, .rn {
+    background: #F1F3F5;
+    color: #6B7682;
+    display: flex; align-items: center; justify-content: center;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    user-select: none;
+  }
+  .hd { height: 26px; }
+  .hd.active, .rn.active { background: var(--navy-soft); color: var(--navy); font-weight: 600; }
+  .c {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    min-height: 34px;
+  }
+  .grid > :nth-child(4n) { border-right: 0; }
+
+  .a1 {
+    position: relative;
+    display: flex; align-items: center;
+    min-height: 64px;
+    outline: 2px solid var(--navy);
+    outline-offset: -2px;
+    background: #FFFDF5;
+    z-index: 1;
+  }
+  .a1::after {                     /* fill handle */
+    content: ""; position: absolute; right: -4px; bottom: -4px;
+    width: 8px; height: 8px; background: var(--navy);
+    border: 2px solid #fff; box-sizing: content-box; border-radius: 1px;
+  }
+  .a1 label {
+    font-size: 22px; font-weight: 700; color: #8A96A3;
+    padding-left: 14px;
+  }
+  .a1 input {
+    flex: 1; min-width: 0;
+    border: 0; outline: 0; background: transparent;
+    font: 700 22px/1 var(--font);
+    color: var(--ink);
+    padding: 14px 12px 14px 2px;
+  }
+  .a1 input::placeholder { color: #B6BFC8; font-weight: 500; }
+  .a2 {
+    color: var(--muted); font-size: 12.5px;
+    padding: 9px 12px; line-height: 1.4;
+  }
+  .a3 { padding: 8px 12px; display: flex; align-items: center; }
+  .a3 label { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .a3 input { width: 15px; height: 15px; accent-color: var(--navy); margin: 0; }
+
+  .tabs {
+    display: flex; gap: 2px;
+    background: #F1F3F5;
+    border-top: 1px solid var(--line);
+    padding: 0 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex: none;
+    font-size: 12.5px; color: #55616D;
+    padding: 8px 12px 9px;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+  }
+  .tab.on { background: #fff; color: var(--navy); font-weight: 600; border-bottom-color: var(--navy); }
+
+  /* ---------------- Action + status ---------------- */
+  .actions {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px;
+    margin-top: 22px;
+  }
+  button.go {
+    font: 600 16px/1 var(--font);
+    color: #fff; background: var(--excel);
+    border: 0; border-radius: 6px;
+    padding: 15px 22px;
+    display: inline-flex; align-items: center; gap: 10px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button.go:hover { background: var(--excel-hover); }
+  button.go:disabled { background: #7E9C8B; cursor: progress; }
+  button.go:focus-visible, .a3 input:focus-visible { outline: 3px solid #9DB3DA; outline-offset: 2px; }
+  .xl {
+    width: 20px; height: 20px; border-radius: 3px; background: #fff; color: var(--excel);
+    font: 800 12px/20px var(--font); text-align: center;
+  }
+
+  .status { font-size: 14.5px; line-height: 1.45; color: var(--muted); min-height: 21px; flex: 1 1 220px; }
+  .status.err { color: var(--error); }
+  .status.ok { color: var(--excel); font-weight: 600; }
+  .spin {
+    display: inline-block; width: 13px; height: 13px; margin-right: 8px; vertical-align: -1px;
+    border: 2px solid #C5CED8; border-top-color: var(--navy); border-radius: 50%;
+    animation: r .8s linear infinite;
+  }
+  @keyframes r { to { transform: rotate(360deg); } }
+
+  footer {
+    margin-top: 56px; padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 13px; line-height: 1.5; color: var(--muted);
+    max-width: 60ch;
+  }
+
+  @media (max-width: 480px) {
+    .grid { grid-template-columns: 32px minmax(0, 1fr) 44px; }
+    .grid > :nth-child(4n) { border-right: 1px solid var(--line); }
+    .grid > .colC { display: none; }
+    .grid > :nth-child(4n+3) { border-right: 0; }
+    .a1 label, .a1 input { font-size: 19px; }
+    button.go { width: 100%; justify-content: center; }
+  }
+  @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Turn a Reddit profile into an Excel report</h1>
+  <p class="lede">Type a username in cell A1. You get one workbook with the account summary, top subreddits, activity by month, weekday and hour, and the most-used words.</p>
+
+  <form id="f" class="sheet" novalidate autocomplete="off">
+    <div class="grid" role="presentation">
+      <div class="hd"></div>
+      <div class="hd active">A</div>
+      <div class="hd">B</div>
+      <div class="hd colC">C</div>
+
+      <div class="rn active">1</div>
+      <div class="c a1">
+        <label for="u">u/</label>
+        <input id="u" name="u" type="text" inputmode="text" spellcheck="false" autocapitalize="off"
+               placeholder="username" aria-describedby="hint" required autofocus>
+      </div>
+      <div class="c"></div>
+      <div class="c colC"></div>
+
+      <div class="rn">2</div>
+      <div class="c a2" id="hint">Or paste a profile link. Press Enter to download.</div>
+      <div class="c"></div>
+      <div class="c colC"></div>
+
+      <div class="rn">3</div>
+      <div class="c a3">
+        <label><input id="fresh" type="checkbox"> Get the latest data (can take 2 minutes)</label>
+      </div>
+      <div class="c"></div>
+      <div class="c colC"></div>
+    </div>
+    <div class="tabs" aria-label="Sheets in the Excel file">
+      <span class="tab on">Summary</span>
+      <span class="tab">Top Subs</span>
+      <span class="tab">Activity</span>
+      <span class="tab">Hourly Grid (60 Days)</span>
+      <span class="tab">Common Words</span>
+    </div>
+  </form>
+
+  <div class="actions">
+    <button class="go" id="go" form="f" type="submit"><span class="xl" aria-hidden="true">X</span><span id="goText">Download Excel file</span></button>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </div>
+
+  <footer>
+    Covers the account's most recent 1,000 posts and comments. Times are in UTC.
+    A profile that has never been looked up before needs a few minutes the first time.
+  </footer>
+</main>
+
+<script>
+  /* ================================================================
+     SETTINGS
+     WEB_APP_URL : your Apps Script deployment URL (ends in /exec)
+     ACCESS_KEY  : leave '' unless you set CFG.ACCESS_KEY in the script
+     ================================================================ */
+  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzBFPcvZ7XsflbIHwer62PaxIAY7mHn9yDbrruOCyETFveKhPNrgLeHnyUbrlCcX74XBQ/exec';
+  const ACCESS_KEY  = '';
+
+  const $ = (id) => document.getElementById(id);
+  const form = $('f'), input = $('u'), btn = $('go'), goText = $('goText'), statusEl = $('status');
+  let timer = null;
+
+  function normalise(v) {
+    let s = String(v || '').trim();
+    s = s.replace(/^https?:\/\/[^\/]+\//i, '').replace(/^\/?(u|user)\//i, '').replace(/[\/?#].*$/, '');
+    return /^[A-Za-z0-9_-]{2,30}$/.test(s) ? s : '';
+  }
+
+  function setStatus(html, kind) {
+    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+    statusEl.innerHTML = html;
+  }
+
+  function busy(on, user) {
+    btn.disabled = on;
+    input.readOnly = on;
+    goText.textContent = on ? 'Building your file…' : 'Download Excel file';
+    clearInterval(timer);
+    if (!on) return;
+    const t0 = Date.now();
+    const tick = () => {
+      const s = Math.round((Date.now() - t0) / 1000);
+      const why = s < 25 ? 'Reading u/' + user + ' and building the workbook'
+                         : 'Still working. New or refreshed profiles take up to 2 minutes';
+      setStatus('<span class="spin" aria-hidden="true"></span>' + why + ' (' + s + ' s)');
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+  }
+
+  function saveBase64(b64, filename) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (btn.disabled) return;
+
+    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(WEB_APP_URL)) {
+      setStatus('This page is not connected yet. Add the Web App URL to WEB_APP_URL in index.html.', 'err');
+      return;
+    }
+    const user = normalise(input.value);
+    if (!user) {
+      setStatus('Enter a Reddit username. Use only letters, numbers, - and _.', 'err');
+      input.focus();
+      return;
+    }
+    input.value = user;
+    const fresh = $('fresh').checked;
+
+    const params = new URLSearchParams({ u: user, fresh: fresh ? '1' : '0' });
+    if (ACCESS_KEY) params.set('key', ACCESS_KEY);
+
+    const ctrl = new AbortController();
+    const killer = setTimeout(() => ctrl.abort(), 330000);   // Apps Script stops at 6 minutes
+    busy(true, user);
+    try {
+      const res = await fetch(WEB_APP_URL + '?' + params.toString(), { signal: ctrl.signal });
+      const data = await res.json();
+      if (!data.ok) throw Object.assign(new Error(data.message || 'The server could not build the file.'), { known: true });
+      saveBase64(data.file, data.filename);
+      busy(false);
+      setStatus('Downloaded ' + esc(data.filename), 'ok');
+    } catch (err) {
+      busy(false);
+      if (err.known) setStatus(esc(err.message), 'err');
+      else if (err.name === 'AbortError') setStatus('The server took too long. Try again in a few minutes.', 'err');
+      else setStatus('Could not reach the server. Check your connection and try again.', 'err');
+    } finally {
+      clearTimeout(killer);
+    }
+  });
+</script>
+</body>
+</html>
